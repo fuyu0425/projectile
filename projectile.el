@@ -1322,16 +1322,22 @@ If DIR is not supplied its set to the current directory by default."
            'none))
        ;; if the file is local or we're connected to it via TRAMP, run
        ;; through the project root functions until we find a project dir
-       (cl-some
-        (lambda (func)
-          (let* ((cache-key (format "%s-%s" func dir))
-                 (cache-value (gethash cache-key projectile-project-root-cache)))
-            (if (and cache-value (file-exists-p cache-value))
-                cache-value
-              (let ((value (funcall func (file-truename dir))))
-                (puthash cache-key value projectile-project-root-cache)
-                value))))
-        projectile-project-root-functions)
+       (if-let ((found (gethash (format "%s-%s" "projectile-root-any" dir) projectile-project-root-cache)))
+           found
+         (let ((cache-truename))
+           (cl-some
+            (lambda (func)
+              (let* ((cache-key (format "%s-%s" func dir))
+                     (cache-value (gethash cache-key projectile-project-root-cache)))
+                (if (and cache-value (file-exists-p cache-value))
+                    cache-value
+                  (unless cache-truename (setq cache-truename (file-truename dir)))
+                  (let ((value (funcall func cache-truename)))
+                    (puthash cache-key value projectile-project-root-cache)
+                    (when value (puthash (format "%s-%s" "projectile-root-any" dir)
+                                         value projectile-project-root-cache))
+                    value))))
+            projectile-project-root-functions)))
        ;; if we get here, we have failed to find a root by all
        ;; conventional means, and we assume the failure isn't transient
        ;; / network related, so cache the failure
